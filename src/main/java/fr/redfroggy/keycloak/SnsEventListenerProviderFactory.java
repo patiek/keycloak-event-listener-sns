@@ -7,15 +7,18 @@ import org.keycloak.events.EventListenerProviderFactory;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.KeycloakSessionFactory;
 
-import com.amazonaws.services.sns.AmazonSNSAsync;
-import com.amazonaws.services.sns.AmazonSNSAsyncClientBuilder;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import software.amazon.awssdk.services.sns.SnsClient;
+import software.amazon.awssdk.services.sns.SnsClientBuilder;
+
+import java.net.URI;
 
 
 public class SnsEventListenerProviderFactory implements EventListenerProviderFactory {
 
     public static final String SNS_EVENT_LISTENER = "aws-sns";
     private SnsEventListenerConfiguration snsEventListenerConfiguration;
+    private SnsClient snsClient;
     private String CONFIG_EVENT_TOPIC_ARN = "event-topic-arn";
     private String CONFIG_ADMIN_EVENT_TOPIC_ARN = "admin-event-topic-arn";
     private static final Logger log = Logger.getLogger(SnsEventListenerProviderFactory.class);
@@ -26,7 +29,6 @@ public class SnsEventListenerProviderFactory implements EventListenerProviderFac
 
     @Override
     public EventListenerProvider create(KeycloakSession session) {
-        AmazonSNSAsync snsClient = AmazonSNSAsyncClientBuilder.standard().build();
         ObjectMapper mapper = new ObjectMapper();
         return new SnsEventListenerProvider(new SnsEventPublisher(snsClient, snsEventListenerConfiguration, mapper), session.getTransactionManager(), session.users(), session.realms());
     }
@@ -43,6 +45,18 @@ public class SnsEventListenerProviderFactory implements EventListenerProviderFac
         log.info("Configuration to publish event in dedicated sns topic : " + configEventTopicArn);
         log.info("Configuration to publish admin event in dedicated sns topic : " + configAdminEventTopicArn);
         snsEventListenerConfiguration = new SnsEventListenerConfiguration(configEventTopicArn, configAdminEventTopicArn);
+
+        SnsClientBuilder snsClientBuilder = SnsClient.builder();
+
+        // Retrieve the AWS_ENDPOINT_URL environment variable
+        String awsEndpointUrl = System.getenv("AWS_ENDPOINT_URL");
+
+        if (awsEndpointUrl != null) {
+            log.info("AWS_ENDPOINT_URL environment variable is set to: " + awsEndpointUrl);
+            snsClientBuilder.endpointOverride(URI.create(awsEndpointUrl));
+        }
+
+        snsClient = snsClientBuilder.build();
     }
 
     @Override

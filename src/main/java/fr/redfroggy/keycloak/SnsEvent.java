@@ -16,6 +16,14 @@ class SnsEvent {
         return event;
     }
 
+    public String getEventId() {
+        if (event == null) {
+            return null;
+        } else {
+            return event.getId();
+        }
+    }
+
     public String getUsername(){
         return username;
     }

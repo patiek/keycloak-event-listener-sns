@@ -2,18 +2,23 @@ package fr.redfroggy.keycloak;
 
 import org.jboss.logging.Logger;
 
-import com.amazonaws.services.sns.AmazonSNSAsync;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.sns.SnsClient;
+import software.amazon.awssdk.services.sns.model.PublishRequest;
+import software.amazon.awssdk.services.sns.model.PublishResponse;
+import software.amazon.awssdk.services.sns.model.SnsException;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 class SnsEventPublisher {
 
-    private final AmazonSNSAsync snsClient;
+    private final SnsClient snsClient;
     private final ObjectMapper mapper;
     private static final Logger log = Logger.getLogger(SnsEventPublisher.class);
     private final SnsEventListenerConfiguration snsEventListenerConfiguration;
 
-    public SnsEventPublisher(AmazonSNSAsync snsClient, SnsEventListenerConfiguration snsEventListenerConfiguration,
+    public SnsEventPublisher(SnsClient snsClient, SnsEventListenerConfiguration snsEventListenerConfiguration,
             ObjectMapper mapper) {
         this.snsClient = snsClient;
         this.snsEventListenerConfiguration = snsEventListenerConfiguration;
@@ -26,7 +31,7 @@ class SnsEventPublisher {
                     "No topicArn specified. Can not send event to AWS SNS! Set environment variable KC_SNS_EVENT_TOPIC_ARN");
             return;
         }
-        publishEvent(snsEvent, snsEventListenerConfiguration.getEventTopicArn());
+        publishEvent(snsEvent.getEventId(), snsEvent, snsEventListenerConfiguration.getEventTopicArn());
     }
 
     public void sendAdminEvent(SnsAdminEvent snsAdminEvent) {
@@ -35,16 +40,35 @@ class SnsEventPublisher {
                     "No topicArn specified. Can not send event to AWS SNS! Set environment variable KC_SNS_ADMIN_EVENT_TOPIC_ARN");
             return;
         }
-        publishEvent(snsAdminEvent, snsEventListenerConfiguration.getAdminEventTopicArn());
+        publishEvent(snsAdminEvent.getEventId(), snsAdminEvent, snsEventListenerConfiguration.getAdminEventTopicArn());
     }
 
-    private void publishEvent(Object event, String topicArn) {
+    private void publishEvent(String id, Object event, String topicArn) {
+
         try {
-            snsClient.publish(topicArn, mapper.writeValueAsString(event));
+            String messageGroupID = null;
+            String messageDeduplicationID = null;
+
+            // if endpoint is FIFO, set group and deduplication IDs
+            if (topicArn.endsWith(".fifo")) {
+                messageGroupID = id;
+                messageDeduplicationID = id;
+            }
+
+            PublishRequest request = PublishRequest.builder()
+                    .message(mapper.writeValueAsString(event))
+                    .messageGroupId(messageGroupID)
+                    .messageDeduplicationId(messageDeduplicationID)
+                    .topicArn(topicArn)
+                    .build();
+
+
+            PublishResponse result = snsClient.publish(request);
+
         } catch (JsonProcessingException e) {
             log.error("The payload wasn't created.", e);
         } catch (Exception e) {
-            log.error("Exception occured during the event publication", e);
+            log.error("Exception occurred during the event publication", e);
         }
     }
 }

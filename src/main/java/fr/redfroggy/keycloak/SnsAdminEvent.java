@@ -15,6 +15,14 @@ class SnsAdminEvent {
         return adminEvent;
     }
 
+    public String getEventId() {
+        if (adminEvent == null) {
+            return null;
+        } else {
+            return adminEvent.getId();
+        }
+    }
+
     public String getUsername(){
         return username;
     }
